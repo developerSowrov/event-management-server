@@ -64,7 +64,7 @@ async function run() {
 
       res.send({
         message: "Login successful",
-        user: { name: user.name, email: user.email },
+        user,
       });
     });
     // Send a ping to confirm a successful connection
