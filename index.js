@@ -111,6 +111,19 @@ async function run() {
         res.status(500).send({ message: "Failed to add event" });
       }
     });
+    app.get("/events", async (req, res) => {
+      try {
+        const events = await eventsCollection
+          .find()
+          .sort({ datetime: 1 })
+          .toArray();
+
+        res.send(events);
+      } catch (error) {
+        console.error("Failed to fetch events:", error);
+        res.status(500).send({ message: "Failed to fetch events" });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
