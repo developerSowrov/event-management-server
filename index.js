@@ -27,6 +27,7 @@ async function run() {
     // await client.connect();
     const db = client.db("eventManagementDB");
     const usersCollection = db.collection("users");
+    const eventsCollection = db.collection("events");
 
     app.post("/register", async (req, res) => {
       const { name, email, password, photoURL } = req.body;
@@ -67,6 +68,50 @@ async function run() {
         user,
       });
     });
+
+    app.post("/add-event", async (req, res) => {
+      try {
+        const {
+          title,
+          name,
+          email,
+          datetime,
+          location,
+          description,
+          attendeeCount,
+        } = req.body;
+
+        if (
+          !title ||
+          !name ||
+          !email ||
+          !datetime ||
+          !location ||
+          !description
+        ) {
+          return res.status(400).send({ message: "All fields are required" });
+        }
+
+        const newEvent = {
+          title,
+          name,
+          email,
+          datetime: new Date(datetime),
+          location,
+          description,
+          attendeeCount: parseInt(attendeeCount),
+        };
+        const result = await eventsCollection.insertOne(newEvent);
+        res.send({
+          message: "Event added successfully",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error adding event:", error);
+        res.status(500).send({ message: "Failed to add event" });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
     console.log(
