@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = 5000;
 
@@ -111,6 +111,45 @@ async function run() {
         res.status(500).send({ message: "Failed to add event" });
       }
     });
+    app.patch("/events/:eventId/join", async (req, res) => {
+      const { eventId } = req.params;
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
+
+      try {
+        const event = await eventsCollection.findOne({
+          _id: new ObjectId(eventId),
+        });
+
+        if (!event) {
+          return res.status(404).send({ message: "Event not found" });
+        }
+
+        // Check if user already joined
+        if (event.attendees?.includes(email)) {
+          return res
+            .status(400)
+            .send({ message: "You have already joined this event." });
+        }
+
+        const result = await eventsCollection.updateOne(
+          { _id: new ObjectId(eventId) },
+          {
+            $inc: { attendeeCount: 1 },
+            $push: { attendees: email },
+          }
+        );
+
+        res.send({ message: "Successfully joined event", result });
+      } catch (error) {
+        console.error("Error in PATCH /events/:eventId/join:", error);
+        res.status(500).send({ message: "Failed to join event" });
+      }
+    });
+
     app.get("/events", async (req, res) => {
       try {
         const events = await eventsCollection
@@ -122,6 +161,65 @@ async function run() {
       } catch (error) {
         console.error("Failed to fetch events:", error);
         res.status(500).send({ message: "Failed to fetch events" });
+      }
+    });
+    app.get("/my-events/:email", async (req, res) => {
+      const { email } = req.params;
+      try {
+        const result = await eventsCollection.find({ email }).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Failed to get user's events:", error);
+        res.status(500).send({ message: "Error fetching events" });
+      }
+    });
+    app.get("/event/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const event = await eventsCollection.findOne({ _id: new ObjectId(id) });
+        if (!event) return res.status(404).send({ message: "Event not found" });
+        res.send(event);
+      } catch (err) {
+        console.error("GET single event error:", err);
+        res.status(500).send({ message: "Error retrieving event" });
+      }
+    });
+
+    app.delete("/event/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await eventsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "Event not found" });
+        }
+
+        res.send({ message: "Event deleted successfully" });
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).send({ message: "Failed to delete event" });
+      }
+    });
+    app.patch("/update-event/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedData = req.body;
+
+      try {
+        const result = await eventsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { ...updatedData, datetime: new Date(updatedData.datetime) } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(400).send({ message: "Nothing updated" });
+        }
+
+        res.send({ message: "Event updated successfully" });
+      } catch (error) {
+        console.error("Update error:", error);
+        res.status(500).send({ message: "Failed to update event" });
       }
     });
 
