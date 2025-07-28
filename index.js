@@ -27,7 +27,9 @@ async function run() {
     // await client.connect();
     const db = client.db("eventManagementDB");
     const usersCollection = db.collection("users");
-    const eventsCollection = db.collection("events");
+    const productsCollection = db.collection("events");
+    const cartCollection = db.collection("cartItems");
+
 
     app.post("/register", async (req, res) => {
       const { name, email, password, photoURL } = req.body;
@@ -69,48 +71,74 @@ async function run() {
       });
     });
 
-    app.post("/add-event", async (req, res) => {
-      try {
-        const {
-          title,
-          name,
-          email,
-          datetime,
-          location,
-          description,
-          attendeeCount,
-        } = req.body;
+   app.post("/add-product", async (req, res) => {
+  try {
+    const { name, price, description, image, quantity, seller, email } = req.body;
 
-        if (
-          !title ||
-          !name ||
-          !email ||
-          !datetime ||
-          !location ||
-          !description
-        ) {
-          return res.status(400).send({ message: "All fields are required" });
-        }
+    // Validate required fields
+    if (!name || !price || !description || !image || !quantity || !seller || !email) {
+      return res.status(400).send({ message: "All fields are required" });
+    }
 
-        const newEvent = {
-          title,
-          name,
-          email,
-          datetime: new Date(datetime),
-          location,
-          description,
-          attendeeCount: parseInt(attendeeCount),
-        };
-        const result = await eventsCollection.insertOne(newEvent);
-        res.send({
-          message: "Event added successfully",
-          insertedId: result.insertedId,
-        });
-      } catch (error) {
-        console.error("Error adding event:", error);
-        res.status(500).send({ message: "Failed to add event" });
-      }
+    const newProduct = {
+      name,
+      price: parseFloat(price),
+      description,
+      image,
+      quantity: parseInt(quantity),
+      seller,
+      email,
+      createdAt: new Date(), // optional: for sorting/filtering later
+    };
+
+    const result = await productsCollection.insertOne(newProduct);
+
+    res.send({
+      message: "Product added successfully",
+      insertedId: result.insertedId,
     });
+  } catch (error) {
+    console.error("Error adding product:", error);
+    res.status(500).send({ message: "Failed to add product" });
+  }
+});
+    app.post("/cart", async (req, res) => {
+  const { product, email, quantity = 1 } = req.body;
+
+  if (!product || !email) {
+    return res.status(400).send({ message: "Product ID and email required" });
+  }
+
+  const existing = await cartCollection.findOne({ productId, email });
+
+  if (existing) {
+    // If item already in cart, increase quantity
+    await cartCollection.updateOne(
+      { product, email },
+      { $inc: { quantity: 1 } }
+    );
+    return res.send({ message: "Increased cart item quantity" });
+  }
+
+  const result = await cartCollection.insertOne({
+    product,
+    email,
+    quantity,
+    addedAt: new Date(),
+  });
+  res.send({ message: "Added to cart", insertedId: result.insertedId });
+});
+
+// GET - Get all cart items by user email
+app.get("/cart/:email", async (req, res) => {
+  const { email } = req.params;
+  try {
+    const items = await cartCollection.find({ email }).toArray();
+    res.send(items);
+  } catch (err) {
+    res.status(500).send({ message: "Failed to fetch cart items" });
+  }
+});
     app.patch("/events/:eventId/join", async (req, res) => {
       const { eventId } = req.params;
       const { email } = req.body;
@@ -120,7 +148,7 @@ async function run() {
       }
 
       try {
-        const event = await eventsCollection.findOne({
+        const event = await productsCollection.findOne({
           _id: new ObjectId(eventId),
         });
 
@@ -135,7 +163,7 @@ async function run() {
             .send({ message: "You have already joined this event." });
         }
 
-        const result = await eventsCollection.updateOne(
+        const result = await productsCollection.updateOne(
           { _id: new ObjectId(eventId) },
           {
             $inc: { attendeeCount: 1 },
@@ -149,10 +177,25 @@ async function run() {
         res.status(500).send({ message: "Failed to join event" });
       }
     });
+    app.get("/products/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const product = await productsCollection.findOne({ _id: new ObjectId(id) });
 
-    app.get("/events", async (req, res) => {
+    if (!product) {
+      return res.status(404).send({ message: "Product not found" });
+    }
+
+    res.send(product);
+  } catch (error) {
+    console.error("Failed to fetch product:", error);
+    res.status(500).send({ message: "Failed to fetch product" });
+  }
+});
+
+    app.get("/products", async (req, res) => {
       try {
-        const events = await eventsCollection
+        const events = await productsCollection
           .find()
           .sort({ datetime: 1 })
           .toArray();
@@ -163,20 +206,20 @@ async function run() {
         res.status(500).send({ message: "Failed to fetch events" });
       }
     });
-    app.get("/my-events/:email", async (req, res) => {
+    app.get("/my-products/:email", async (req, res) => {
       const { email } = req.params;
       try {
-        const result = await eventsCollection.find({ email }).toArray();
+        const result = await productsCollection.find({ email }).toArray();
         res.send(result);
       } catch (error) {
         console.error("Failed to get user's events:", error);
         res.status(500).send({ message: "Error fetching events" });
       }
     });
-    app.get("/event/:id", async (req, res) => {
+    app.get("/product/:id", async (req, res) => {
       const { id } = req.params;
       try {
-        const event = await eventsCollection.findOne({ _id: new ObjectId(id) });
+        const event = await productsCollection.findOne({ _id: new ObjectId(id) });
         if (!event) return res.status(404).send({ message: "Event not found" });
         res.send(event);
       } catch (err) {
@@ -185,10 +228,10 @@ async function run() {
       }
     });
 
-    app.delete("/event/:id", async (req, res) => {
+    app.delete("/product/:id", async (req, res) => {
       const { id } = req.params;
       try {
-        const result = await eventsCollection.deleteOne({
+        const result = await productsCollection.deleteOne({
           _id: new ObjectId(id),
         });
 
@@ -202,12 +245,12 @@ async function run() {
         res.status(500).send({ message: "Failed to delete event" });
       }
     });
-    app.patch("/update-event/:id", async (req, res) => {
+    app.patch("/update-product/:id", async (req, res) => {
       const { id } = req.params;
       const updatedData = req.body;
 
       try {
-        const result = await eventsCollection.updateOne(
+        const result = await productsCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { ...updatedData, datetime: new Date(updatedData.datetime) } }
         );
