@@ -109,7 +109,7 @@ async function run() {
     return res.status(400).send({ message: "Product ID and email required" });
   }
 
-  const existing = await cartCollection.findOne({ productId, email });
+  const existing = await cartCollection.findOne({ product, email });
 
   if (existing) {
     // If item already in cart, increase quantity
