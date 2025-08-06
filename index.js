@@ -103,7 +103,7 @@ async function run() {
   }
 });
     app.post("/cart", async (req, res) => {
-  const { product, email, quantity = 1 } = req.body;
+  const { product, email} = req.body;
 
   if (!product || !email) {
     return res.status(400).send({ message: "Product ID and email required" });
@@ -115,7 +115,6 @@ async function run() {
     // If item already in cart, increase quantity
     await cartCollection.updateOne(
       { product, email },
-      { $inc: { quantity: 1 } }
     );
     return res.send({ message: "Increased cart item quantity" });
   }
@@ -123,7 +122,6 @@ async function run() {
   const result = await cartCollection.insertOne({
     product,
     email,
-    quantity,
     addedAt: new Date(),
   });
   res.send({ message: "Added to cart", insertedId: result.insertedId });
